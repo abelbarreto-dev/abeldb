@@ -71,7 +71,8 @@ class UserOperation:
                 data = raw if isinstance(raw, list) else [raw]
 
         found_user = [
-            u for u in data
+            u
+            for u in data
             if (u["username"], u["host"], u["port"]) == (user.username, user.host, user.port)
         ]
 
@@ -212,13 +213,16 @@ class UserOperation:
             raise Exception("database unexpected drop error")
 
     @classmethod
-    def __filter_db_user__(cls, file_path_name: str, user: UserCreateDatabase | UserConnect | UserDropDatabase) -> list:
+    def __filter_db_user__(
+        cls, file_path_name: str, user: UserCreateDatabase | UserConnect | UserDropDatabase
+    ) -> list:
         with open(file=file_path_name, mode="rb") as file:
             raw = pickle_load(file)
             data = raw if isinstance(raw, list) else [raw]
 
         found_user = [
-            u for u in data
+            u
+            for u in data
             if (u["username"], u["host"], u["port"]) == (user.username, user.host, user.port)
         ]
 

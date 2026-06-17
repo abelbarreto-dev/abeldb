@@ -5,9 +5,14 @@ This is my NoSQL database created using Python.
 * Python3.14
 
 ## Commands
-For Lint, run the following:
+For Lint Check, run the following:
 ```commandline
 ruff check
+```
+
+For Lint Format, run the following:
+```commandline
+ruff format .
 ```
 
 ---
