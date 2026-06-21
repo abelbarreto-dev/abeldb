@@ -1,16 +1,18 @@
-from datetime import date, datetime
-from decimal import Decimal
-from enum import Enum
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
+
+from core.utils.column_util import validator_column_decorator
+from core.utils.types_enum import TypesEnum
 
 
 class ColumnParams(BaseModel):
     min_length: int = 0
     max_length: int = 255
-    value: str | int | float | bool | list | tuple | dict | date | datetime | Decimal | Enum
+    type_name: TypesEnum
     regex: str | None = None
+    can_negative: bool = True
     is_nullable: bool = False
     is_unique: bool = False
     is_primary_key: bool = False
@@ -25,6 +27,7 @@ class ColumnParams(BaseModel):
 class Column(BaseModel):
     name: str
     params: ColumnParams
+    document: list[Document]
 
 
 class Table(BaseModel):
@@ -32,3 +35,18 @@ class Table(BaseModel):
     name: str
     database_id: str
     table_body: list[Column]
+
+
+class DocData(BaseModel):
+    column_name: str
+    value: Any
+
+
+class Document(BaseModel):
+    doc_index: str
+    data: list[DocData]
+
+
+@validator_column_decorator
+def make_doc_valid_data(value: Any, column: Column) -> Any:
+    return DocData(column_name=column.name, value=value)
