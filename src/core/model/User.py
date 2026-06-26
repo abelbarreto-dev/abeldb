@@ -91,10 +91,31 @@ class UserOperation:
 
         try:
             UserCreate.model_validate(saved[-1])
+            print("user created")
             return True
         except ValidationError as e:
             print(e)
             return False
+
+    @classmethod
+    async def find_db_prefix_by_user_id(cls, user_id: str):
+        file_path_name = getenv(RESTRICT_FILE) or "restrict_null"
+
+        with open(file=file_path_name, mode="rb") as file:
+            raw = pickle_load(file)
+            data = raw if isinstance(raw, list) else [raw]
+
+        if not data:
+            raise Exception("any user found")
+
+        found_user = [user for user in data if user.id == user_id]
+
+        if not found_user:
+            raise Exception("user not found for this id")
+
+        db_user: UserCreate = found_user[0]
+
+        return f"{db_user.username}-{db_user.host}-{db_user.port}-"
 
     @classmethod
     async def database_connect(cls, user: UserConnect) -> Connection:
