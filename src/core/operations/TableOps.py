@@ -21,6 +21,7 @@ from src.utils.constants import (
     TABLE_ALREADY_EXISTS,
     TABLE_COLUMNS_NOT_FOUND,
     TABLE_DROP_UNEXPECTED_ERROR,
+    TABLE_NAME_INVALID,
     TABLE_NOT_EXISTS,
     UNEXPECTED_ALTER_TABLE_ERROR,
 )
@@ -44,6 +45,8 @@ class TableOps:
         """
         print("creating table")
         table_exists = sum((1 for pfl in self._db_.db.table_files if pfl.name == table.name)) == 0
+
+        table.name = table.name.lower()
 
         if table_exists:
             raise AbelDBException(
@@ -98,7 +101,6 @@ class TableOps:
             )
 
         database_file = getenv(RESTRICT_DB_PATH) or "database_path/"
-
         database_file += db_prefix
 
         if relact_table_name is not None:
@@ -281,7 +283,12 @@ class TableOps:
 
         table_path_file += f"/{table_exists.file}"
 
-        column_exists = sum((1 for tc in table_exists.table_body if tc.name == column.name)) == 1
+        with open(file=table_path_file, mode="rb") as reader:
+            tables: list = pickle_load(reader)
+
+        target_table = [Table(**table) for table in tables if table.name == table_name][0]
+
+        column_exists = sum((1 for tc in target_table.table_body if tc.name == column.name)) == 1
 
         if column_exists and not is_drop:
             raise AbelDBException(
@@ -292,16 +299,16 @@ class TableOps:
 
         if is_drop:
             table_exists.table_body = [
-                col for col in table_exists.table_body if col.name != column.name
+                col for col in target_table.table_body if col.name != column.name
             ]
         else:
             valid_column = validate_column_params(**column.model_dump())
             column = Column(**valid_column)
-            table_exists.table_body.append(column)
+            target_table.table_body.append(column)
 
         try:
             with open(file=table_path_file, mode="wb") as writer:
-                pickle_dump(Table(**table_exists), writer)
+                pickle_dump(target_table, writer)
             print(f"table edited -> drop={is_drop}")
         except OSError:
             raise AbelDBException(
@@ -309,6 +316,87 @@ class TableOps:
                 code=StatusEnum.UNAUTHORIZED,
                 info=["alter table", "add column", column.name],
             )
+
+    async def alter_table_rename(self, table_name: str, new_table_name: str) -> None:
+        print("alter table -> rename")
+
+        table_name = table_name.lower()
+        new_table_name = new_table_name.lower()
+
+        if len(new_table_name) < 2:
+            raise AbelDBException(
+                TABLE_NAME_INVALID,
+                code=StatusEnum.UNAUTHORIZED,
+                info=[
+                    "alter table",
+                    "rename",
+                    f"from: {table_name}",
+                    f"to: {new_table_name}",
+                    "smaller than 2 length",
+                ],
+            )
+
+        db = self._db_.db
+
+        table_exists = sum((1 for tf in db.table_files if tf.name == table_name)) == 1
+
+        if not table_exists:
+            raise AbelDBException(
+                TABLE_NOT_EXISTS,
+                code=StatusEnum.NOT_FOUND,
+                info=["alter table rename", "not found", table_name],
+            )
+
+        original = self.__db_table_formater__(
+            db_id=db.userId, database=db.database, table=table_name
+        )
+        renamed = self.__db_table_formater__(
+            db_id=db.userId, database=db.database, table=new_table_name
+        )
+
+        db_prefix = await UserOps.find_db_prefix_by_user_id(user_id=db.userId)
+        db_prefix += f"{db.database}.abel"
+
+        table_path = getenv(RESTRICT_TABLES_PATH) or "table_path"
+        table_path_file = f"{table_path}/{db_prefix}"
+
+        if not isdir(table_path_file):
+            raise AbelDBException(
+                TABLE_NOT_EXISTS,
+                code=StatusEnum.NOT_FOUND,
+                info=["table not found", table_name, db.database],
+            )
+
+        with open(file=f"{table_path_file}/{original}", mode="rb") as reader:
+            tables: list = pickle_load(reader)
+
+        target_table = [Table(**table) for table in tables if table.name == table_name][0]
+
+        target_table.name = new_table_name
+
+        with open(file=f"{table_path_file}/{renamed}", mode="wb") as writer:
+            pickle_dump(target_table, writer)
+
+        remove(f"{table_path_file}/{original}")
+
+        db.table_files = [file for file in db.table_files if file.name != table_name]
+
+        db.table_files.append(**{"name": target_table.name, "file": renamed})
+
+        database_file = getenv(RESTRICT_DB_PATH) or "database_path/"
+        database_file += db_prefix
+
+        if not isfile(database_file):
+            raise AbelDBException(
+                DATABASE_NOT_FOUND,
+                code=StatusEnum.NOT_FOUND,
+                info=["database not found", db.database],
+            )
+
+        with open(file=database_file, mode="wb") as writer:
+            pickle_dump(db.model_dump(), writer)
+
+        print("table renamed!")
 
     def __db_table_formater__(self, db_id: str, database: str, table: str) -> str:
         return f"{db_id}-{database}-table-{table}.abel"

@@ -11,6 +11,7 @@ DATABASE_NOT_FOUND: str = "database not found"
 TABLE_NOT_FOUND: str = "table not found"
 TABLE_NOT_EXISTS: str = "table don't exists"
 TABLE_DROP_UNEXPECTED_ERROR: str = "unexpected error to drop table"
+TABLE_NAME_INVALID: str = "table name invalid"
 DATABASE_NOT_FOUND: str = "database not found"
 
 DATABASE_USER_NOT_FOUND: str = "database user not found"
