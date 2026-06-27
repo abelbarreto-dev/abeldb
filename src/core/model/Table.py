@@ -1,9 +1,9 @@
-from genericpath import isdir
-from os import getenv, isfile
+from os import getenv, isdir, isfile, remove
 from pathlib import Path
 from pickle import (
     dump as pickle_dump,
 )
+from pickle import load as pickle_load
 from typing import Any, Self
 from uuid import uuid4
 
@@ -75,7 +75,20 @@ class TableOps:
     async def async_create_table(
         self, table: Table, relact_table_name: str = None, relation_type: RelationType = None
     ) -> None:
+        """
+        Async function to create a new table of documents. You must send an object of Table, the
+        table relacted to this table if possible, then you must send the relation type.
+
+        Consider that you need a relation type in case of relation table be not None, else it will
+        raise an exception. As well as you need at least a forengn key in case of relation table
+        present.
+        """
         print("creating table")
+        table_exists = sum(1 for pfl in self._db_.db.table_files if pfl.name == table.name) == 0
+
+        if table_exists:
+            raise Exception("table already exists")
+
         if len(table.table_body) == 0:
             raise Exception("table must define at least one column")
 
@@ -88,7 +101,7 @@ class TableOps:
         )
 
         data_b = self._db_.db.model_copy()
-        data_b.table_files.append(table_file)
+        data_b.table_files.append(**{"name": table.name, "file": table_file})
 
         db_prefix = await UserOperation.find_db_prefix_by_user_id(user_id=data_b.userId)
         db_prefix += f"{data_b.database}.abel"
@@ -104,7 +117,7 @@ class TableOps:
         table_path_file += f"/{table_file}"
 
         if isfile(table_path_file):
-            raise Exception("table aready exists.")
+            raise Exception("table already exists")
 
         database_file = getenv(RESTRICT_DB_PATH) or "database_path/"
 
@@ -114,20 +127,36 @@ class TableOps:
             if relation_type is None:
                 raise Exception("relation must be defined")
 
-            found = (
+            found = tuple(
                 table_db
                 for table_db in data_b.table_files
-                if relact_table_name.lower() in table_db.lower()
+                if relact_table_name.lower() == table_db.name.lower()
             )
 
             if found:
+                file = found[0]
                 data_b.relations.append(
                     Relation(
-                        table_one_id=table_file,
-                        table_two_id=relact_table_name.lower(),
+                        table_one_id=table_file.lower(),
+                        table_two_id=file.file.lower(),
                         relation=relation_type,
                     )
                 )
+            else:
+                raise Exception("relation table not found")
+
+            found = sum(
+                1
+                for column in table.table_body
+                if column.params.is_foreign_key
+                and column.params.fK_foreign_table_name == relact_table_name
+            )
+
+            if found == 0:
+                raise Exception("you must include one foreign key that matches the table")
+
+        if not isfile(database_file):
+            raise Exception("database not found")
 
         with open(file=table_path_file, mode="wb") as writer:
             pickle_dump(table.model_dump(), writer)
@@ -136,6 +165,14 @@ class TableOps:
         print("table created!")
 
     async def async_drop_table(self, table_name: str) -> None:
+        """
+        Async function to drop a table. It has not return (None).
+        You must send the table_name param, then:
+        * It removes the relation;
+        * It removes the column foreign key;
+        * It removes the data;
+        * It removes the table;
+        """
         print("dropping table")
         db = self._db_.db
         filter_table = sum(1 for i in db.table_files if i.lower() == table_name.lower())
@@ -143,17 +180,56 @@ class TableOps:
         if filter_table == 0:
             raise Exception("table not found")
 
-        filter_table = sum(
-            1 for rel in db.relations if table_name in (rel.table_one_id, rel.table_two_id)
-        )
+        db_prefix = await UserOperation.find_db_prefix_by_user_id(user_id=db.userId)
+        db_prefix += f"{db.database}.abel"
 
-        # TODO: setar None nas relações e remover
-        # TODO: remover relações onde temos None, None
-        # TODO: remover coluna de chave estrangueira
-        # TODO: dropar a tabela
+        table_path = getenv(RESTRICT_TABLES_PATH) or "table_path"
+        table_path_file = f"{table_path}/{db_prefix}"
 
-        if filter_table > 0:
-            raise Exception("current table has relationships.")
+        if not isdir(table_path_file):
+            raise Exception("table don't exists")
+
+        database_file = getenv(RESTRICT_DB_PATH) or "database_path/"
+
+        database_file += db_prefix
+
+        if not isfile(database_file):
+            raise Exception("database not found")
+
+        update_relations = ()
+
+        for rel in db.relations:
+            search = (rel.table_one_id, rel.table_two_id)
+            if table_name in search:
+                with open(file=f"{table_path_file}/{rel.table_one_id}", mode="rb") as reader:
+                    table: list = pickle_load(reader)
+                with open(file=f"{table_path_file}/{rel.table_one_id}", mode="wb") as writer:
+                    table.table_body = [
+                        column for column in table.table_body if not column.params.is_foreign_key
+                    ]
+                    pickle_dump(table, writer)
+                with open(file=f"{table_path_file}/{rel.table_two_id}", mode="rb") as reader:
+                    table: list = pickle_load(reader)
+                with open(file=f"{table_path_file}/{rel.table_two_id}", mode="rb") as writer:
+                    table.table_body = [
+                        column for column in table.table_body if not column.params.is_foreign_key
+                    ]
+                    pickle_dump(table, writer)
+            update_relations += (rel,)
+
+        db.relations = [rel for rel in update_relations]
+
+        db.table_files = [table for table in db.table_files if table != table_name]
+
+        with open(file=database_file, mode="wb") as writer:
+            pickle_dump(db.model_dump(), writer)
+
+        table_path_file += f"/{table_name}"
+
+        if isfile(table_path_file):
+            remove(table_path_file)
+
+        print("table dropped.")
 
     async def async_alter_table(
         self, table_name: str, column: Column, is_drop: bool = False
