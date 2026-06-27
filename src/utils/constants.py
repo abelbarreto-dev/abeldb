@@ -28,10 +28,10 @@ ABELDB_USER_NOT_FOUND: str = "abelbd user not found"
 TYPE_NAME_NOT_FOUND: str = "column params must have a type_name"
 INVALID_TYPE: str = "invalid type found"
 
-"""
-/home/abel/Desktop/abeldb/src/core/model/Table.py
-
-/home/abel/Desktop/abeldb/src/core/model/User.py
-
-/home/abel/Desktop/abeldb/src/core/utils/column_util.py
-"""
+PRIMARY_FOREIGN_KEY: str = "primary key cannot be a foreign key"
+FOREIGN_KEY_SETTINGS_INVALID: str = "foreign key mismatch or invalid settings"
+STRING_INVALID_LENGTH: str = (
+    "string length is invalid, negative or min length greter than max length"
+)
+COLUMN_ALREADY_EXISTS: str = "column already exists"
+UNEXPECTED_ALTER_TABLE_ERROR: str = "unexpected alter table error"

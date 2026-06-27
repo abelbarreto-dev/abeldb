@@ -4,7 +4,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict
 
-from src.utils.column_util import validator_column_decorator
+from src.utils.column_util import validator_column_decorator, validator_column_params_decorator
 from src.utils.types_enum import TypesEnum
 
 load_dotenv()
@@ -48,6 +48,11 @@ class DocData(BaseModel):
 class Document(BaseModel):
     doc_index: str
     data: list[DocData]
+
+
+@validator_column_params_decorator
+def validate_column_params(column: Column) -> dict:
+    return column.model_dump()
 
 
 @validator_column_decorator

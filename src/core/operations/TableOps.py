@@ -7,10 +7,11 @@ from typing import Self
 
 from src.core.model.Connection import Connection
 from src.core.model.Relation import Relation, RelationType
-from src.core.model.Table import Column, Table
+from src.core.model.Table import Column, Table, validate_column_params
 from src.core.operations import UserOps
 from src.exceptions.AbelDBException import AbelDBException
 from src.utils.constants import (
+    COLUMN_ALREADY_EXISTS,
     DATABASE_NOT_FOUND,
     FOREIGN_KEY_ERROR,
     RELATION_TABLE_NOT_FOUND,
@@ -21,6 +22,7 @@ from src.utils.constants import (
     TABLE_COLUMNS_NOT_FOUND,
     TABLE_DROP_UNEXPECTED_ERROR,
     TABLE_NOT_EXISTS,
+    UNEXPECTED_ALTER_TABLE_ERROR,
 )
 from src.utils.status_enum import StatusEnum
 
@@ -41,7 +43,7 @@ class TableOps:
         present.
         """
         print("creating table")
-        table_exists = sum(1 for pfl in self._db_.db.table_files if pfl.name == table.name) == 0
+        table_exists = sum((1 for pfl in self._db_.db.table_files if pfl.name == table.name)) == 0
 
         if table_exists:
             raise AbelDBException(
@@ -57,7 +59,7 @@ class TableOps:
                 info=["columns", self._db_.db.database],
             )
 
-        pk_count = sum(1 for row in table.table_body if row.primary_key)
+        pk_count = sum((1 for row in table.table_body if row.primary_key))
         if pk_count != 1:
             raise AbelDBException(
                 f"table must contains only one primary key -> {pk_count} found.",
@@ -127,10 +129,12 @@ class TableOps:
                 )
 
             found = sum(
-                1
-                for column in table.table_body
-                if column.params.is_foreign_key
-                and column.params.fK_foreign_table_name == relact_table_name
+                (
+                    1
+                    for column in table.table_body
+                    if column.params.is_foreign_key
+                    and column.params.fK_foreign_table_name == relact_table_name
+                )
             )
 
             if found == 0:
@@ -164,7 +168,7 @@ class TableOps:
         """
         print("dropping table")
         db = self._db_.db
-        filter_table = sum(1 for i in db.table_files if i.name.lower() == table_name.lower())
+        filter_table = sum((1 for i in db.table_files if i.name.lower() == table_name.lower()))
 
         if filter_table == 0:
             raise AbelDBException(
@@ -237,10 +241,60 @@ class TableOps:
                 info=["table", "drop fail", table_name],
             )
 
-    async def async_alter_table(
+    async def async_alter_table_add_column(
         self, table_name: str, column: Column, is_drop: bool = False
     ) -> None:
-        pass
+        print(f"alter table process -> is_drop={is_drop}")
+
+        db = self._db_.db
+
+        table_exists = tuple(t for t in db.table_files if t.name == table_name)
+
+        if len(table_exists) == 0:
+            raise AbelDBException(
+                TABLE_NOT_EXISTS,
+                code=StatusEnum.NOT_FOUND,
+                info=["table not exists", "not found", table_name],
+            )
+
+        valid_column = validate_column_params(**column.model_dump())
+        column = Column(**valid_column)
+
+        db_prefix = await UserOps.find_db_prefix_by_user_id(user_id=db.userId)
+        db_prefix += f"{db.database}.abel"
+
+        table_path = getenv(RESTRICT_TABLES_PATH) or "table_path"
+        table_path_file = f"{table_path}/{db_prefix}"
+
+        if not isdir(table_path_file):
+            raise AbelDBException(
+                TABLE_NOT_EXISTS,
+                code=StatusEnum.NOT_FOUND,
+                info=["table not found", table_name, db.database],
+            )
+
+        table_path_file += f"/{table_exists.file}"
+
+        column_exists = sum((1 for tc in table_exists.table_body if tc.name == column.name)) == 1
+
+        if column_exists:
+            raise AbelDBException(
+                COLUMN_ALREADY_EXISTS,
+                code=StatusEnum.UNAUTHORIZED,
+                info=["column", "name", "already exists", column.name],
+            )
+
+        table_exists.table_body.append(column)
+
+        try:
+            with open(file=table_path_file, mode="wb") as writer:
+                pickle_dump(Table(**table_exists), writer)
+        except OSError:
+            raise AbelDBException(
+                UNEXPECTED_ALTER_TABLE_ERROR,
+                code=StatusEnum.UNAUTHORIZED,
+                info=["alter table", "add column", column.name],
+            )
 
     def __db_table_formater__(self, db_id: str, database: str, table: str) -> str:
         return f"{db_id}-{database}-table-{table}.abel"
