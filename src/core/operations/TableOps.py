@@ -318,6 +318,11 @@ class TableOps:
             )
 
     async def alter_table_rename(self, table_name: str, new_table_name: str) -> None:
+        """
+        Async function to rename a table, you just send the current table name and the rename.
+        Then, this function makes a query to check if the table exists and try to continue and
+        rename the table and file.
+        """
         print("alter table -> rename")
 
         table_name = table_name.lower()
