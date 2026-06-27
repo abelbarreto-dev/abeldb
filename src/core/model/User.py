@@ -13,10 +13,23 @@ from pydantic import BaseModel, ValidationError
 
 from src.core.model.Connection import Connection
 from src.core.model.Database import Database
+from src.core.utils.constants import (
+    ABELDB_USER_NOT_FOUND,
+    DATABASE_ALREADY_EXISTS,
+    DATABASE_EMPTY,
+    DATABASE_INVALID_PATH,
+    DATABASE_NOT_EXISTS,
+    DATABASE_NOT_SET,
+    DATABASE_UNEXPECT_DROP_ERROR,
+    DATABASE_USER_ID_NOT_FOUND,
+    DATABASE_USER_NOT_FOUND,
+    FATAL_ERROR_DATABASE_NOT_FOUND,
+    RESTRICT_DB_PATH,
+    RESTRICT_FILE,
+    SETTINGS_NOT_FOUND,
+)
 
 load_dotenv()
-RESTRICT_FILE: str = "RESTRICT_FILE"
-RESTRICT_DB_PATH: str = "RESTRICT_DB_PATH"
 
 
 class User(BaseModel):
@@ -106,12 +119,12 @@ class UserOperation:
             data = raw if isinstance(raw, list) else [raw]
 
         if not data:
-            raise Exception("any user found")
+            raise Exception(DATABASE_USER_NOT_FOUND)
 
         found_user = [user for user in data if user.id == user_id]
 
         if not found_user:
-            raise Exception("user not found for this id")
+            raise Exception(DATABASE_USER_ID_NOT_FOUND)
 
         db_user: UserCreate = found_user[0]
 
@@ -122,7 +135,7 @@ class UserOperation:
         print("connecting to database")
 
         if not user.database:
-            raise Exception("database not set")
+            raise Exception(DATABASE_NOT_SET)
 
         file_path_name = getenv(RESTRICT_FILE) or "restrict_null"
         if not isfile(file_path_name):
@@ -134,7 +147,7 @@ class UserOperation:
             path = getenv(RESTRICT_DB_PATH) or "restrict_db_path"
 
             if not isdir(path):
-                raise Exception("invalid path to save database")
+                raise Exception(DATABASE_INVALID_PATH)
 
             file_name = cls.__db_name_formater__(
                 username=found_user["username"],
@@ -146,30 +159,30 @@ class UserOperation:
             file_db = path + file_name
 
             if not isfile(file_db):
-                raise Exception("database doesn't exists!")
+                raise Exception(DATABASE_NOT_EXISTS)
 
             with open(file=file_db, mode="rb") as file:
                 raw = pickle_load(file)
                 data = raw if isinstance(raw, list) else [raw]
 
             if not data:
-                raise Exception("database doesn't contain any data")
+                raise Exception(DATABASE_EMPTY)
 
             found_db = data[0]
 
             if not found_db:
-                raise Exception("fatal error and database not found")
+                raise Exception(FATAL_ERROR_DATABASE_NOT_FOUND)
 
             return Connection(Database.model_validate(found_db))
         else:
-            raise Exception("any setting found")
+            raise Exception(SETTINGS_NOT_FOUND)
 
     @classmethod
     async def database_create(cls, user: UserCreateDatabase) -> None:
         print("creating a new database")
 
         if not user.database:
-            raise Exception("database not set")
+            raise Exception(DATABASE_NOT_SET)
 
         file_path_name = getenv(RESTRICT_FILE) or "restrict_null"
         if not isfile(file_path_name):
@@ -187,7 +200,7 @@ class UserOperation:
             path = getenv(RESTRICT_DB_PATH) or "restrict_db_path"
 
             if not isdir(path):
-                raise Exception("invalid path to save database")
+                raise Exception(DATABASE_INVALID_PATH)
 
             file_name = cls.__db_name_formater__(
                 username=user.username,
@@ -198,14 +211,14 @@ class UserOperation:
             file_db = path + file_name
 
             if isfile(file_db):
-                raise Exception("database already exists!")
+                raise Exception(DATABASE_ALREADY_EXISTS)
 
             with open(file=file_db, mode="wb") as file:
                 pickle_dump(database, file)
 
             print("database created")
         else:
-            raise Exception("any setting found")
+            raise Exception(SETTINGS_NOT_FOUND)
 
     @classmethod
     async def database_drop(cls, drop_user: UserDropDatabase) -> None:
@@ -214,7 +227,7 @@ class UserOperation:
         path = getenv(RESTRICT_DB_PATH) or "restrict_db_path"
 
         if not isdir(path):
-            raise Exception("invalid path to database")
+            raise Exception(DATABASE_INVALID_PATH)
 
         file_name = cls.__db_name_formater__(
             username=drop_user.username,
@@ -225,13 +238,13 @@ class UserOperation:
         file_db = path + file_name
 
         if not isfile(file_db):
-            raise Exception("database doesn't exists!")
+            raise Exception(DATABASE_NOT_EXISTS)
 
         try:
             remove(file_db)
             print("database dropped")
         except OSError:
-            raise Exception("database unexpected drop error")
+            raise Exception(DATABASE_UNEXPECT_DROP_ERROR)
 
     @classmethod
     def __filter_db_user__(
@@ -248,7 +261,7 @@ class UserOperation:
         ]
 
         if not found_user:
-            raise Exception("abelbd user not found!")
+            raise Exception(ABELDB_USER_NOT_FOUND)
 
         return found_user
 

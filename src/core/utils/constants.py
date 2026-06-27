@@ -1,0 +1,36 @@
+RESTRICT_FILE: str = "RESTRICT_FILE"
+RESTRICT_TABLES_PATH: str = "RESTRICT_TABLES_PATH"
+RESTRICT_DB_PATH: str = "RESTRICT_DB_PATH"
+
+TABLE_COLUMNS_NOT_FOUND: str = "table must define at least one column"
+TABLE_ALREADY_EXISTS: str = "table already exists"
+RELATION_UNDEFINED: str = "relation must be defined"
+RELATION_TABLE_NOT_FOUND: str = "relation table not found"
+FOREIGN_KEY_ERROR: str = "you must include one foreign key that matches the table"
+DATABASE_NOT_FOUND: str = "database not found"
+TABLE_NOT_FOUND: str = "table not found"
+TABLE_NOT_EXISTS: str = "table don't exists"
+DATABASE_NOT_FOUND: str = "database not found"
+
+DATABASE_USER_NOT_FOUND: str = "database user not found"
+DATABASE_USER_ID_NOT_FOUND: str = "database user not found for this id"
+DATABASE_EMPTY: str = "database doesn't contain any data"
+FATAL_ERROR_DATABASE_NOT_FOUND: str = "fatal error and database not found"
+DATABASE_NOT_SET: str = "database not set"
+DATABASE_ALREADY_EXISTS: str = "database already exists"
+SETTINGS_NOT_FOUND: str = "settings not found"
+DATABASE_INVALID_PATH: str = "invalid path to database"
+DATABASE_NOT_EXISTS: str = "database doesn't exists"
+DATABASE_UNEXPECT_DROP_ERROR: str = "database unexpected drop error"
+ABELDB_USER_NOT_FOUND: str = "abelbd user not found"
+
+TYPE_NAME_NOT_FOUND: str = "column params must have a type_name"
+INVALID_TYPE: str = "invalid type found"
+
+"""
+/home/abel/Desktop/abeldb/src/core/model/Table.py
+
+/home/abel/Desktop/abeldb/src/core/model/User.py
+
+/home/abel/Desktop/abeldb/src/core/utils/column_util.py
+"""

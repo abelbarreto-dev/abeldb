@@ -15,6 +15,17 @@ from core.utils.types_enum import TypesEnum
 from src.core.model.Connection import Connection
 from src.core.model.Relation import Relation, RelationType
 from src.core.model.User import UserOperation
+from src.core.utils.constants import (
+    DATABASE_NOT_FOUND,
+    FOREIGN_KEY_ERROR,
+    RELATION_TABLE_NOT_FOUND,
+    RELATION_UNDEFINED,
+    RESTRICT_DB_PATH,
+    RESTRICT_TABLES_PATH,
+    TABLE_ALREADY_EXISTS,
+    TABLE_COLUMNS_NOT_FOUND,
+    TABLE_NOT_EXISTS,
+)
 
 load_dotenv()
 
@@ -64,10 +75,6 @@ def make_doc_valid_data(value: Any, column: Column) -> Any:
     return DocData(column_name=column.name, value=value)
 
 
-RESTRICT_TABLES_PATH: str = "RESTRICT_TABLES_PATH"
-RESTRICT_DB_PATH: str = "RESTRICT_DB_PATH"
-
-
 class TableOps:
     def __init__(self, db: Connection) -> None:
         self._db_ = db
@@ -87,10 +94,10 @@ class TableOps:
         table_exists = sum(1 for pfl in self._db_.db.table_files if pfl.name == table.name) == 0
 
         if table_exists:
-            raise Exception("table already exists")
+            raise Exception(TABLE_ALREADY_EXISTS)
 
         if len(table.table_body) == 0:
-            raise Exception("table must define at least one column")
+            raise Exception(TABLE_COLUMNS_NOT_FOUND)
 
         pk_count = sum(1 for row in table.table_body if row.primary_key)
         if pk_count != 1:
@@ -117,7 +124,7 @@ class TableOps:
         table_path_file += f"/{table_file}"
 
         if isfile(table_path_file):
-            raise Exception("table already exists")
+            raise Exception(TABLE_ALREADY_EXISTS)
 
         database_file = getenv(RESTRICT_DB_PATH) or "database_path/"
 
@@ -125,7 +132,7 @@ class TableOps:
 
         if relact_table_name is not None:
             if relation_type is None:
-                raise Exception("relation must be defined")
+                raise Exception(RELATION_UNDEFINED)
 
             found = tuple(
                 table_db
@@ -143,7 +150,7 @@ class TableOps:
                     )
                 )
             else:
-                raise Exception("relation table not found")
+                raise Exception(RELATION_TABLE_NOT_FOUND)
 
             found = sum(
                 1
@@ -153,10 +160,10 @@ class TableOps:
             )
 
             if found == 0:
-                raise Exception("you must include one foreign key that matches the table")
+                raise Exception(FOREIGN_KEY_ERROR)
 
         if not isfile(database_file):
-            raise Exception("database not found")
+            raise Exception(DATABASE_NOT_FOUND)
 
         with open(file=table_path_file, mode="wb") as writer:
             pickle_dump(table.model_dump(), writer)
@@ -178,7 +185,7 @@ class TableOps:
         filter_table = sum(1 for i in db.table_files if i.lower() == table_name.lower())
 
         if filter_table == 0:
-            raise Exception("table not found")
+            raise Exception(TABLE_NOT_EXISTS)
 
         db_prefix = await UserOperation.find_db_prefix_by_user_id(user_id=db.userId)
         db_prefix += f"{db.database}.abel"
@@ -187,14 +194,14 @@ class TableOps:
         table_path_file = f"{table_path}/{db_prefix}"
 
         if not isdir(table_path_file):
-            raise Exception("table don't exists")
+            raise Exception(TABLE_NOT_EXISTS)
 
         database_file = getenv(RESTRICT_DB_PATH) or "database_path/"
 
         database_file += db_prefix
 
         if not isfile(database_file):
-            raise Exception("database not found")
+            raise Exception(DATABASE_NOT_FOUND)
 
         update_relations = ()
 

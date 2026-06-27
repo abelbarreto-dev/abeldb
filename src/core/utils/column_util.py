@@ -4,6 +4,7 @@ from re import compile
 from typing import Any, Callable
 
 from core.utils.types_enum import TypesEnum
+from src.core.utils.constants import INVALID_TYPE, TYPE_NAME_NOT_FOUND
 
 
 def validator_column_decorator(function: Callable) -> Callable:
@@ -183,7 +184,7 @@ def validator_column_decorator(function: Callable) -> Callable:
     @wraps(function)
     def decorator(value: Any, column: dict[str, Any]) -> Callable:
         if not column["params"]["type_name"]:
-            raise Exception("column params must have a type_name")
+            raise Exception(TYPE_NAME_NOT_FOUND)
 
         validator = {
             "bool": check_bool,
@@ -201,7 +202,7 @@ def validator_column_decorator(function: Callable) -> Callable:
         }.get(column["params"]["type_name"].value, None)
 
         if not validator:
-            raise Exception("invalid type found")
+            raise Exception(INVALID_TYPE)
 
         result_validator = validator(value, **column["params"])
 
