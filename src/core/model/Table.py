@@ -10,12 +10,12 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict
 
-from core.utils.column_util import validator_column_decorator
-from core.utils.types_enum import TypesEnum
 from src.core.model.Connection import Connection
 from src.core.model.Relation import Relation, RelationType
 from src.core.model.User import UserOperation
-from src.core.utils.constants import (
+from src.exceptions import AbelDBException
+from src.utils.column_util import validator_column_decorator
+from src.utils.constants import (
     DATABASE_NOT_FOUND,
     FOREIGN_KEY_ERROR,
     RELATION_TABLE_NOT_FOUND,
@@ -24,8 +24,11 @@ from src.core.utils.constants import (
     RESTRICT_TABLES_PATH,
     TABLE_ALREADY_EXISTS,
     TABLE_COLUMNS_NOT_FOUND,
+    TABLE_DROP_UNEXPECTED_ERROR,
     TABLE_NOT_EXISTS,
 )
+from src.utils.status_enum import StatusEnum
+from src.utils.types_enum import TypesEnum
 
 load_dotenv()
 
@@ -94,14 +97,26 @@ class TableOps:
         table_exists = sum(1 for pfl in self._db_.db.table_files if pfl.name == table.name) == 0
 
         if table_exists:
-            raise Exception(TABLE_ALREADY_EXISTS)
+            raise AbelDBException(
+                TABLE_ALREADY_EXISTS,
+                code=StatusEnum.CONFLICT,
+                info=[table.name, self._db_.db.database],
+            )
 
         if len(table.table_body) == 0:
-            raise Exception(TABLE_COLUMNS_NOT_FOUND)
+            raise AbelDBException(
+                TABLE_COLUMNS_NOT_FOUND,
+                code=StatusEnum.NOT_FOUND,
+                info=["columns", self._db_.db.database],
+            )
 
         pk_count = sum(1 for row in table.table_body if row.primary_key)
         if pk_count != 1:
-            raise Exception(f"table must contains only one primary key -> {pk_count} found.")
+            raise AbelDBException(
+                f"table must contains only one primary key -> {pk_count} found.",
+                code=StatusEnum.BAD_REQUEST,
+                info=["foreing key missing", "table", table.name],
+            )
 
         table_file = self.__db_table_formater__(
             db_id=self._db_.db.id, database=self._db_.db.database, table=table.name
@@ -124,7 +139,11 @@ class TableOps:
         table_path_file += f"/{table_file}"
 
         if isfile(table_path_file):
-            raise Exception(TABLE_ALREADY_EXISTS)
+            raise AbelDBException(
+                TABLE_ALREADY_EXISTS,
+                code=StatusEnum.CONFLICT,
+                info=["table conflit", "already exists", table.name],
+            )
 
         database_file = getenv(RESTRICT_DB_PATH) or "database_path/"
 
@@ -132,7 +151,11 @@ class TableOps:
 
         if relact_table_name is not None:
             if relation_type is None:
-                raise Exception(RELATION_UNDEFINED)
+                raise AbelDBException(
+                    RELATION_UNDEFINED,
+                    code=StatusEnum.BAD_REQUEST,
+                    info=["relation between tables", "relation type undefined"],
+                )
 
             found = tuple(
                 table_db
@@ -150,7 +173,11 @@ class TableOps:
                     )
                 )
             else:
-                raise Exception(RELATION_TABLE_NOT_FOUND)
+                raise AbelDBException(
+                    RELATION_TABLE_NOT_FOUND,
+                    code=StatusEnum.BAD_REQUEST,
+                    info=["foreign key", "table reference", "not found"],
+                )
 
             found = sum(
                 1
@@ -160,10 +187,18 @@ class TableOps:
             )
 
             if found == 0:
-                raise Exception(FOREIGN_KEY_ERROR)
+                raise AbelDBException(
+                    FOREIGN_KEY_ERROR,
+                    code=StatusEnum.FORBIDDEN,
+                    info=["column", "foreign key", "table name referenced"],
+                )
 
         if not isfile(database_file):
-            raise Exception(DATABASE_NOT_FOUND)
+            raise AbelDBException(
+                DATABASE_NOT_FOUND,
+                code=StatusEnum.BAD_REQUEST,
+                info=["dtatabase problem", "not found file", self._db_.db.database],
+            )
 
         with open(file=table_path_file, mode="wb") as writer:
             pickle_dump(table.model_dump(), writer)
@@ -182,10 +217,14 @@ class TableOps:
         """
         print("dropping table")
         db = self._db_.db
-        filter_table = sum(1 for i in db.table_files if i.lower() == table_name.lower())
+        filter_table = sum(1 for i in db.table_files if i.name.lower() == table_name.lower())
 
         if filter_table == 0:
-            raise Exception(TABLE_NOT_EXISTS)
+            raise AbelDBException(
+                TABLE_NOT_EXISTS,
+                code=StatusEnum.NOT_FOUND,
+                info=["table not found", "tabe name in database", db.database],
+            )
 
         db_prefix = await UserOperation.find_db_prefix_by_user_id(user_id=db.userId)
         db_prefix += f"{db.database}.abel"
@@ -194,14 +233,22 @@ class TableOps:
         table_path_file = f"{table_path}/{db_prefix}"
 
         if not isdir(table_path_file):
-            raise Exception(TABLE_NOT_EXISTS)
+            raise AbelDBException(
+                TABLE_NOT_EXISTS,
+                code=StatusEnum.NOT_FOUND,
+                info=["table not found", table_name, db.database],
+            )
 
         database_file = getenv(RESTRICT_DB_PATH) or "database_path/"
 
         database_file += db_prefix
 
         if not isfile(database_file):
-            raise Exception(DATABASE_NOT_FOUND)
+            raise AbelDBException(
+                DATABASE_NOT_FOUND,
+                code=StatusEnum.NOT_FOUND,
+                info=["database not found", db.database],
+            )
 
         update_relations = ()
 
@@ -233,10 +280,15 @@ class TableOps:
 
         table_path_file += f"/{table_name}"
 
-        if isfile(table_path_file):
+        try:
             remove(table_path_file)
-
-        print("table dropped.")
+            print("table dropped.")
+        except OSError:
+            raise AbelDBException(
+                TABLE_DROP_UNEXPECTED_ERROR,
+                code=StatusEnum.INTERNAL_ERROR,
+                info=["table", "drop fail", table_name],
+            )
 
     async def async_alter_table(
         self, table_name: str, column: Column, is_drop: bool = False

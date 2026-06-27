@@ -10,6 +10,7 @@ FOREIGN_KEY_ERROR: str = "you must include one foreign key that matches the tabl
 DATABASE_NOT_FOUND: str = "database not found"
 TABLE_NOT_FOUND: str = "table not found"
 TABLE_NOT_EXISTS: str = "table don't exists"
+TABLE_DROP_UNEXPECTED_ERROR: str = "unexpected error to drop table"
 DATABASE_NOT_FOUND: str = "database not found"
 
 DATABASE_USER_NOT_FOUND: str = "database user not found"

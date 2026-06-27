@@ -13,7 +13,8 @@ from pydantic import BaseModel, ValidationError
 
 from src.core.model.Connection import Connection
 from src.core.model.Database import Database
-from src.core.utils.constants import (
+from src.exceptions import AbelDBException
+from src.utils.constants import (
     ABELDB_USER_NOT_FOUND,
     DATABASE_ALREADY_EXISTS,
     DATABASE_EMPTY,
@@ -28,6 +29,7 @@ from src.core.utils.constants import (
     RESTRICT_FILE,
     SETTINGS_NOT_FOUND,
 )
+from src.utils.status_enum import StatusEnum
 
 load_dotenv()
 
@@ -90,8 +92,10 @@ class UserOperation:
         ]
 
         if found_user:
-            raise Exception(
-                f"user {user.username} already exists in port {user.port} and host {user.host}!"
+            raise AbelDBException(
+                f"user {user.username} already exists in port {user.port} and host {user.host}",
+                code=StatusEnum.CONFLICT,
+                info=["database", "port", "host"],
             )
 
         data.append(user.model_dump())
@@ -119,12 +123,18 @@ class UserOperation:
             data = raw if isinstance(raw, list) else [raw]
 
         if not data:
-            raise Exception(DATABASE_USER_NOT_FOUND)
+            raise AbelDBException(
+                DATABASE_USER_NOT_FOUND, code=StatusEnum.NOT_FOUND, info=["database", "not found"]
+            )
 
         found_user = [user for user in data if user.id == user_id]
 
         if not found_user:
-            raise Exception(DATABASE_USER_ID_NOT_FOUND)
+            raise AbelDBException(
+                DATABASE_USER_ID_NOT_FOUND,
+                code=StatusEnum.NOT_FOUND,
+                info=["database", "user", "not found"],
+            )
 
         db_user: UserCreate = found_user[0]
 
@@ -135,7 +145,11 @@ class UserOperation:
         print("connecting to database")
 
         if not user.database:
-            raise Exception(DATABASE_NOT_SET)
+            raise AbelDBException(
+                DATABASE_NOT_SET,
+                code=StatusEnum.UNAUTHORIZED,
+                info=["database", "settings not found", "unauthorized"],
+            )
 
         file_path_name = getenv(RESTRICT_FILE) or "restrict_null"
         if not isfile(file_path_name):
@@ -147,7 +161,11 @@ class UserOperation:
             path = getenv(RESTRICT_DB_PATH) or "restrict_db_path"
 
             if not isdir(path):
-                raise Exception(DATABASE_INVALID_PATH)
+                raise AbelDBException(
+                    DATABASE_INVALID_PATH,
+                    code=StatusEnum.FORBIDDEN,
+                    info=["database file", "not found", "path", "path"],
+                )
 
             file_name = cls.__db_name_formater__(
                 username=found_user["username"],
@@ -159,30 +177,50 @@ class UserOperation:
             file_db = path + file_name
 
             if not isfile(file_db):
-                raise Exception(DATABASE_NOT_EXISTS)
+                raise AbelDBException(
+                    DATABASE_NOT_EXISTS,
+                    code=StatusEnum.NOT_FOUND,
+                    info=["database", "not exists", file_name],
+                )
 
             with open(file=file_db, mode="rb") as file:
                 raw = pickle_load(file)
                 data = raw if isinstance(raw, list) else [raw]
 
             if not data:
-                raise Exception(DATABASE_EMPTY)
+                raise AbelDBException(
+                    DATABASE_EMPTY,
+                    code=StatusEnum.FORBIDDEN,
+                    info=["database data", "empty", "forbidden"],
+                )
 
             found_db = data[0]
 
             if not found_db:
-                raise Exception(FATAL_ERROR_DATABASE_NOT_FOUND)
+                raise AbelDBException(
+                    FATAL_ERROR_DATABASE_NOT_FOUND,
+                    code=StatusEnum.INTERNAL_ERROR,
+                    info=["database", "fatal error", "not found", "connection"],
+                )
 
             return Connection(Database.model_validate(found_db))
         else:
-            raise Exception(SETTINGS_NOT_FOUND)
+            raise AbelDBException(
+                SETTINGS_NOT_FOUND,
+                code=StatusEnum.UNAUTHORIZED,
+                info=["settings database", "not found", "unauthorized"],
+            )
 
     @classmethod
     async def database_create(cls, user: UserCreateDatabase) -> None:
         print("creating a new database")
 
         if not user.database:
-            raise Exception(DATABASE_NOT_SET)
+            raise AbelDBException(
+                DATABASE_NOT_SET,
+                code=StatusEnum.UNAUTHORIZED,
+                info=["database", "settings not found", "unauthorized"],
+            )
 
         file_path_name = getenv(RESTRICT_FILE) or "restrict_null"
         if not isfile(file_path_name):
@@ -200,7 +238,11 @@ class UserOperation:
             path = getenv(RESTRICT_DB_PATH) or "restrict_db_path"
 
             if not isdir(path):
-                raise Exception(DATABASE_INVALID_PATH)
+                raise AbelDBException(
+                    DATABASE_INVALID_PATH,
+                    code=StatusEnum.FORBIDDEN,
+                    info=["database file", "not found", "path", "path"],
+                )
 
             file_name = cls.__db_name_formater__(
                 username=user.username,
@@ -211,14 +253,22 @@ class UserOperation:
             file_db = path + file_name
 
             if isfile(file_db):
-                raise Exception(DATABASE_ALREADY_EXISTS)
+                raise AbelDBException(
+                    DATABASE_ALREADY_EXISTS,
+                    code=StatusEnum.CONFLICT,
+                    info=["database", "conflict", "already exists", file_name],
+                )
 
             with open(file=file_db, mode="wb") as file:
                 pickle_dump(database, file)
 
             print("database created")
         else:
-            raise Exception(SETTINGS_NOT_FOUND)
+            raise AbelDBException(
+                SETTINGS_NOT_FOUND,
+                code=StatusEnum.UNAUTHORIZED,
+                info=["settings database", "not found", "unauthorized"],
+            )
 
     @classmethod
     async def database_drop(cls, drop_user: UserDropDatabase) -> None:
@@ -227,7 +277,11 @@ class UserOperation:
         path = getenv(RESTRICT_DB_PATH) or "restrict_db_path"
 
         if not isdir(path):
-            raise Exception(DATABASE_INVALID_PATH)
+            raise AbelDBException(
+                DATABASE_INVALID_PATH,
+                code=StatusEnum.FORBIDDEN,
+                info=["database file", "not found", "path", "path"],
+            )
 
         file_name = cls.__db_name_formater__(
             username=drop_user.username,
@@ -238,13 +292,21 @@ class UserOperation:
         file_db = path + file_name
 
         if not isfile(file_db):
-            raise Exception(DATABASE_NOT_EXISTS)
+            raise AbelDBException(
+                DATABASE_NOT_EXISTS,
+                code=StatusEnum.NOT_FOUND,
+                info=["database", "file not exists"],
+            )
 
         try:
             remove(file_db)
             print("database dropped")
         except OSError:
-            raise Exception(DATABASE_UNEXPECT_DROP_ERROR)
+            raise AbelDBException(
+                DATABASE_UNEXPECT_DROP_ERROR,
+                code=StatusEnum.INTERNAL_ERROR,
+                info=["drop database", "unexpect error"],
+            )
 
     @classmethod
     def __filter_db_user__(
@@ -261,7 +323,11 @@ class UserOperation:
         ]
 
         if not found_user:
-            raise Exception(ABELDB_USER_NOT_FOUND)
+            raise AbelDBException(
+                ABELDB_USER_NOT_FOUND,
+                code=StatusEnum.NOT_FOUND,
+                info=["databse", "user", "not found"],
+            )
 
         return found_user
 

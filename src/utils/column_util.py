@@ -3,8 +3,10 @@ from functools import wraps
 from re import compile
 from typing import Any, Callable
 
-from core.utils.types_enum import TypesEnum
-from src.core.utils.constants import INVALID_TYPE, TYPE_NAME_NOT_FOUND
+from src.exceptions import AbelDBException
+from src.utils.constants import INVALID_TYPE, TYPE_NAME_NOT_FOUND
+from src.utils.status_enum import StatusEnum
+from src.utils.types_enum import TypesEnum
 
 
 def validator_column_decorator(function: Callable) -> Callable:
@@ -184,7 +186,11 @@ def validator_column_decorator(function: Callable) -> Callable:
     @wraps(function)
     def decorator(value: Any, column: dict[str, Any]) -> Callable:
         if not column["params"]["type_name"]:
-            raise Exception(TYPE_NAME_NOT_FOUND)
+            raise AbelDBException(
+                TYPE_NAME_NOT_FOUND,
+                code=StatusEnum.BAD_REQUEST,
+                info=["column", "type_name", "not found"],
+            )
 
         validator = {
             "bool": check_bool,
@@ -202,12 +208,20 @@ def validator_column_decorator(function: Callable) -> Callable:
         }.get(column["params"]["type_name"].value, None)
 
         if not validator:
-            raise Exception(INVALID_TYPE)
+            raise AbelDBException(
+                INVALID_TYPE,
+                code=StatusEnum.INTERNAL_ERROR,
+                info=["field type", "invalid", column["params"]["type_name"].value],
+            )
 
         result_validator = validator(value, **column["params"])
 
         if result_validator != "success":
-            raise Exception(result_validator)
+            raise AbelDBException(
+                result_validator,
+                code=StatusEnum.INTERNAL_ERROR,
+                info=["column", "validation invalid"],
+            )
 
         return function(value, **column)
 
