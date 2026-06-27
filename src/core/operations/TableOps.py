@@ -59,6 +59,9 @@ class TableOps:
                 info=["columns", self._db_.db.database],
             )
 
+        for column in table.table_body:
+            validate_column_params(**column.model_dump())
+
         pk_count = sum((1 for row in table.table_body if row.primary_key))
         if pk_count != 1:
             raise AbelDBException(
@@ -241,9 +244,15 @@ class TableOps:
                 info=["table", "drop fail", table_name],
             )
 
-    async def async_alter_table_add_column(
+    async def async_alter_table_column(
         self, table_name: str, column: Column, is_drop: bool = False
     ) -> None:
+        """
+        Async function to alter table adding a new column there. You send the name of the table,
+        the column you want to add or drop, and your choice.
+
+        If `is_drop` is true, the column will be deleted.
+        """
         print(f"alter table process -> is_drop={is_drop}")
 
         db = self._db_.db
@@ -256,9 +265,6 @@ class TableOps:
                 code=StatusEnum.NOT_FOUND,
                 info=["table not exists", "not found", table_name],
             )
-
-        valid_column = validate_column_params(**column.model_dump())
-        column = Column(**valid_column)
 
         db_prefix = await UserOps.find_db_prefix_by_user_id(user_id=db.userId)
         db_prefix += f"{db.database}.abel"
@@ -277,18 +283,26 @@ class TableOps:
 
         column_exists = sum((1 for tc in table_exists.table_body if tc.name == column.name)) == 1
 
-        if column_exists:
+        if column_exists and not is_drop:
             raise AbelDBException(
                 COLUMN_ALREADY_EXISTS,
                 code=StatusEnum.UNAUTHORIZED,
                 info=["column", "name", "already exists", column.name],
             )
 
-        table_exists.table_body.append(column)
+        if is_drop:
+            table_exists.table_body = [
+                col for col in table_exists.table_body if col.name != column.name
+            ]
+        else:
+            valid_column = validate_column_params(**column.model_dump())
+            column = Column(**valid_column)
+            table_exists.table_body.append(column)
 
         try:
             with open(file=table_path_file, mode="wb") as writer:
                 pickle_dump(Table(**table_exists), writer)
+            print(f"table edited -> drop={is_drop}")
         except OSError:
             raise AbelDBException(
                 UNEXPECTED_ALTER_TABLE_ERROR,
