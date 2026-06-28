@@ -3,7 +3,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict
 
-from src.utils.column_util import validator_column_params_decorator
+from src.core.wrappers.validate_column import validator_column
 from src.utils.types_enum import TypesEnum
 
 load_dotenv()
@@ -38,6 +38,6 @@ class Table(BaseModel):
     table_body: list[Column]
 
 
-@validator_column_params_decorator
+@validator_column
 def validate_column_params(column: Column) -> dict:
     return column
