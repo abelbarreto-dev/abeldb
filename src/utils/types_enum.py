@@ -14,4 +14,5 @@ class TypesEnum(Enum):
     NONE = "NoneType"
     SET = "set"
     STR = "str"
+    TEXT = "text"
     TUPLE = "tuple"

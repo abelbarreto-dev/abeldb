@@ -32,7 +32,10 @@ INVALID_TYPE: str = "invalid type found"
 PRIMARY_FOREIGN_KEY: str = "primary key cannot be a foreign key"
 FOREIGN_KEY_SETTINGS_INVALID: str = "foreign key mismatch or invalid settings"
 STRING_INVALID_LENGTH: str = (
-    "string length is invalid, negative or min length greter than max length"
+    "string length is invalid, negative or min length greater than max length"
+)
+TEXT_INVALID_LENGTH: str = (
+    "text length is invalid, negative or min length greater than max length"
 )
 COLUMN_ALREADY_EXISTS: str = "column already exists"
 UNEXPECTED_ALTER_TABLE_ERROR: str = "unexpected alter table error"

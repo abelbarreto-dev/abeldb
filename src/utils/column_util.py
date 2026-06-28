@@ -9,6 +9,7 @@ from src.utils.constants import (
     INVALID_TYPE,
     PRIMARY_FOREIGN_KEY,
     STRING_INVALID_LENGTH,
+    TEXT_INVALID_LENGTH,
     TYPE_NAME_NOT_FOUND,
 )
 from src.utils.status_enum import StatusEnum
@@ -19,7 +20,7 @@ def validator_column_params_decorator(function: Callable) -> Callable:
     @wraps(function)
     def decorator(column: dict[str, Any]) -> Callable:
         if (
-            column["params"]["type_name"] == TypesEnum.STR
+            column["params"]["type_name"].value == TypesEnum.STR.value
             and column["params"]["min_length"] < 0
             and column["params"]["min_length"] > column["params"]["max_length"]
         ):
@@ -29,11 +30,22 @@ def validator_column_params_decorator(function: Callable) -> Callable:
                 info=[
                     "column.params",
                     "type_name",
+                    "string",
                     "min_length",
                     "max_length",
                     "negative",
                     "min_length > max_length",
                 ],
+            )
+
+        if (
+            column["params"]["type_name"].value == TypesEnum.TEXT.value
+            and column["params"]["min_length"] < 0
+        ):
+            raise AbelDBException(
+                TEXT_INVALID_LENGTH,
+                code=StatusEnum.FORBIDDEN,
+                info=["column.params", "type_name", "text", "min_length", "negative"],
             )
 
         if column["params"]["is_primary_key"] and column["params"]["is_foreign_key"]:
@@ -229,6 +241,29 @@ def validator_column_decorator(function: Callable) -> Callable:
             return "value too short"
         return "success"
 
+    def check_text(value: Any, params: dict[str, Any]) -> str:
+        if value is None and not params["is_nullable"]:
+            return "value cannot be null"
+
+        if params["min_length"] < 0:
+            return "min length cannot be negative"
+
+        type_name = get_column_type_value_str(value)
+
+        if not type_name == TypesEnum.STR.value:
+            return "value does not match type text"
+
+        if params["regex"]:
+            compiled_regex = compile(params["regex"])
+
+            test_value = str(value) if isinstance(value, str) else "a/+*_fail_*+\\"
+
+            result = compiled_regex.match(test_value) is not None
+            if not result:
+                return "value does not match regex"
+
+        return "success"
+
     def check_tuple(value: Any, params: dict[str, Any]) -> str:
         if value is None and not params["is_nullable"]:
             return "value cannot be null"
@@ -261,6 +296,7 @@ def validator_column_decorator(function: Callable) -> Callable:
             "list": check_list,
             "set": check_set,
             "str": check_str,
+            "text": check_text,
             "tuple": check_tuple,
         }.get(column["params"]["type_name"].value, None)
 
