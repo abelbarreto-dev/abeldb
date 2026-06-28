@@ -38,4 +38,5 @@ TEXT_INVALID_LENGTH: str = (
     "text length is invalid, negative or min length greater than max length"
 )
 COLUMN_ALREADY_EXISTS: str = "column already exists"
+COLUMN_OVERRIDE_NOT_FOUND: str = "column override not found"
 UNEXPECTED_ALTER_TABLE_ERROR: str = "unexpected alter table error"

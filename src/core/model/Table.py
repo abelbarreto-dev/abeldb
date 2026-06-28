@@ -30,7 +30,6 @@ class ColumnParams(BaseModel):
 class Column(BaseModel):
     name: str
     params: ColumnParams
-    documents: list[Document]
 
 
 class Table(BaseModel):

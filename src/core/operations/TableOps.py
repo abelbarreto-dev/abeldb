@@ -13,6 +13,7 @@ from src.core.operations.UserOps import UserOps
 from src.exceptions.AbelDBException import AbelDBException
 from src.utils.constants import (
     COLUMN_ALREADY_EXISTS,
+    COLUMN_OVERRIDE_NOT_FOUND,
     DATABASE_NOT_FOUND,
     FOREIGN_KEY_ERROR,
     RELATION_TABLE_NOT_FOUND,
@@ -24,6 +25,7 @@ from src.utils.constants import (
     TABLE_DROP_UNEXPECTED_ERROR,
     TABLE_NAME_INVALID,
     TABLE_NOT_EXISTS,
+    TABLE_NOT_FOUND,
     UNEXPECTED_ALTER_TABLE_ERROR,
 )
 from src.utils.status_enum import StatusEnum
@@ -158,7 +160,7 @@ class TableOps:
             )
 
         with open(file=table_path_file, mode="wb") as writer:
-            pickle_dump(table.model_dump(), writer)
+            pickle_dump(table, writer)
         with open(file=database_file, mode="wb") as writer:
             pickle_dump(data_b.model_dump(), writer)
         print(f"table '{table.name}' created!")
@@ -252,15 +254,31 @@ class TableOps:
             )
 
     async def async_alter_table_column(
-        self, table_name: str, column: Column, is_drop: bool = False
+        self,
+        table_name: str,
+        column: Column,
+        is_drop: bool = False,
+        is_override: bool = False,
+        column_override: str = None,
     ) -> None:
         """
         Async function to alter table adding a new column there. You send the name of the table,
         the column you want to add or drop, and your choice.
 
         If `is_drop` is true, the column will be deleted.
+        
+        If `is_override` is true, you must provide the column_override.
+
+        * `column_override` represents the original column name you wanna change.
         """
-        print(f"alter table process -> is_drop={is_drop}")
+        print(f"alter table process -> is_drop={is_drop} -> override={is_override}")
+
+        if is_override and not column_override:
+            raise AbelDBException(
+                COLUMN_OVERRIDE_NOT_FOUND,
+                code=StatusEnum.UNAUTHORIZED,
+                info=["is_override", "column override", "name not found", "override true"],
+            )
 
         db = self._db_.db
 
@@ -272,6 +290,8 @@ class TableOps:
                 code=StatusEnum.NOT_FOUND,
                 info=["table not exists", "not found", table_name],
             )
+
+        table_file = table_exists[0].file
 
         db_prefix = await UserOps.find_db_prefix_by_user_id(user_id=db.userId)
         db_prefix += f"{db.database}.abel"
@@ -286,16 +306,22 @@ class TableOps:
                 info=["table not found", table_name, db.database],
             )
 
-        table_path_file += f"/{table_exists.file}"
+        table_path_file += f"/{table_file}"
 
         with open(file=table_path_file, mode="rb") as reader:
-            tables: list = pickle_load(reader)
+            tables = pickle_load(reader)
+            target_table = tables
 
-        target_table = [Table(**table) for table in tables if table.name == table_name][0]
+        if target_table.name != table_name:
+            raise AbelDBException(
+                TABLE_NOT_FOUND,
+                code=StatusEnum.FORBIDDEN,
+                info=["table", "does not match", "name"],
+            )
 
         column_exists = sum((1 for tc in target_table.table_body if tc.name == column.name)) == 1
 
-        if column_exists and not is_drop:
+        if column_exists and not is_drop and not is_override:
             raise AbelDBException(
                 COLUMN_ALREADY_EXISTS,
                 code=StatusEnum.UNAUTHORIZED,
@@ -303,18 +329,28 @@ class TableOps:
             )
 
         if is_drop:
-            table_exists.table_body = [
+            target_table.table_body = [
                 col for col in target_table.table_body if col.name != column.name
             ]
-        else:
-            valid_column = validate_column_params(**column.model_dump())
+        elif not is_override:
+            valid_column = validate_column_params(column.model_dump())
             column = Column(**valid_column)
             target_table.table_body.append(column)
+        else:
+            valid_column = validate_column_params(column.model_dump())
+            column = Column(**valid_column)
+            column_list = []
+            for col in target_table.table_body:
+                if column_override == col.name:
+                    column_list.append(column)
+                    continue
+                column_list.append(col)
+            target_table.table_body = column_list
 
         try:
             with open(file=table_path_file, mode="wb") as writer:
                 pickle_dump(target_table, writer)
-            print(f"table edited -> drop={is_drop}")
+            print(f"table edited -> drop={is_drop} -> override={is_override}")
         except OSError:
             raise AbelDBException(
                 UNEXPECTED_ALTER_TABLE_ERROR,
@@ -322,7 +358,7 @@ class TableOps:
                 info=["alter table", "add column", column.name],
             )
 
-    async def alter_table_rename(self, table_name: str, new_table_name: str) -> None:
+    async def async_alter_table_rename(self, table_name: str, new_table_name: str) -> None:
         """
         Async function to rename a table, you just send the current table name and the rename.
         Then, this function makes a query to check if the table exists and try to continue and
@@ -358,17 +394,17 @@ class TableOps:
             )
 
         original = self.__db_table_formater__(
-            db_id=db.userId, database=db.database, table=table_name
+            db_id=db.id, database=db.database, table=table_name
         )
         renamed = self.__db_table_formater__(
-            db_id=db.userId, database=db.database, table=new_table_name
+            db_id=db.id, database=db.database, table=new_table_name
         )
 
         db_prefix = await UserOps.find_db_prefix_by_user_id(user_id=db.userId)
         db_prefix += f"{db.database}.abel"
 
         table_path = getenv(RESTRICT_TABLES_PATH) or "table_path"
-        table_path_file = f"{table_path}/{db_prefix}"
+        table_path_file = f"{table_path}{db_prefix}"
 
         if not isdir(table_path_file):
             raise AbelDBException(
@@ -378,9 +414,15 @@ class TableOps:
             )
 
         with open(file=f"{table_path_file}/{original}", mode="rb") as reader:
-            tables: list = pickle_load(reader)
+            tables = pickle_load(reader)
+            target_table = tables
 
-        target_table = [Table(**table) for table in tables if table.name == table_name][0]
+        if target_table.name != table_name:
+            raise AbelDBException(
+                TABLE_NOT_FOUND,
+                code=StatusEnum.FORBIDDEN,
+                info=["table", "does not match", "name"],
+            )
 
         target_table.name = new_table_name
 
@@ -391,7 +433,7 @@ class TableOps:
 
         db.table_files = [file for file in db.table_files if file.name != table_name]
 
-        db.table_files.append(**{"name": target_table.name, "file": renamed})
+        db.table_files.append(TableFile(name=target_table.name, file=renamed))
 
         database_file = getenv(RESTRICT_DB_PATH) or "database_path/"
         database_file += db_prefix
