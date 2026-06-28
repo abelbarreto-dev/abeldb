@@ -266,7 +266,7 @@ class TableOps:
         the column you want to add or drop, and your choice.
 
         If `is_drop` is true, the column will be deleted.
-        
+
         If `is_override` is true, you must provide the column_override.
 
         * `column_override` represents the original column name you wanna change.
@@ -393,9 +393,7 @@ class TableOps:
                 info=["alter table rename", "not found", table_name],
             )
 
-        original = self.__db_table_formater__(
-            db_id=db.id, database=db.database, table=table_name
-        )
+        original = self.__db_table_formater__(db_id=db.id, database=db.database, table=table_name)
         renamed = self.__db_table_formater__(
             db_id=db.id, database=db.database, table=new_table_name
         )
@@ -448,7 +446,49 @@ class TableOps:
         with open(file=database_file, mode="wb") as writer:
             pickle_dump(db.model_dump(), writer)
 
-        print("table renamed!")
+        print(f"table '{table_name}' renamed to {new_table_name}!")
+
+    async def async_find_table(self, table_name: str) -> Table:
+        """
+        Async function to find a table by its name. You send a name, the system search in database
+        and if ok, the system search in files, if ok, it returns the table object.
+
+        * If the table not found, it will raise an exception.
+        """
+        print(f"looking for a table named {table_name}...")
+
+        db = self._db_.db
+
+        file = [file.file for file in db.table_files if file.name == table_name]
+
+        if len(file) == 0:
+            raise AbelDBException(
+                TABLE_NOT_FOUND,
+                code=StatusEnum.NOT_FOUND,
+                info=["table not found", table_name, "file"],
+            )
+
+        file = file[0]
+
+        db_prefix = await UserOps.find_db_prefix_by_user_id(user_id=db.userId)
+        db_prefix += f"{db.database}.abel"
+
+        table_path = getenv(RESTRICT_TABLES_PATH) or "table_path"
+        table_path_file = f"{table_path}{db_prefix}"
+
+        with open(file=f"{table_path_file}/{file}", mode="rb") as reader:
+            tables = pickle_load(reader)
+            target_table = tables
+
+        if target_table.name != table_name:
+            raise AbelDBException(
+                TABLE_NOT_FOUND,
+                code=StatusEnum.FORBIDDEN,
+                info=["table", "does not match", "name"],
+            )
+
+        print("table found!")
+        return target_table
 
     def __db_table_formater__(self, db_id: str, database: str, table: str) -> str:
         return f"{db_id}-{database}-table-{table}.abel"

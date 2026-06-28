@@ -1,10 +1,9 @@
-from typing import Any
 from uuid import uuid4
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict
 
-from src.utils.column_util import validator_column_decorator, validator_column_params_decorator
+from src.utils.column_util import validator_column_params_decorator
 from src.utils.types_enum import TypesEnum
 
 load_dotenv()
@@ -39,21 +38,6 @@ class Table(BaseModel):
     table_body: list[Column]
 
 
-class DocData(BaseModel):
-    column_name: str
-    value: Any
-
-
-class Document(BaseModel):
-    doc_index: str
-    data: list[DocData]
-
-
 @validator_column_params_decorator
 def validate_column_params(column: Column) -> dict:
     return column
-
-
-@validator_column_decorator
-def make_doc_valid_data(value: Any, column: Column) -> Any:
-    return DocData(column_name=column.name, value=value)

@@ -28,6 +28,7 @@ ABELDB_USER_NOT_FOUND: str = "abelbd user not found"
 
 TYPE_NAME_NOT_FOUND: str = "column params must have a type_name"
 INVALID_TYPE: str = "invalid type found"
+COLUMN_NOT_MATCH: str = "value column not match"
 
 PRIMARY_FOREIGN_KEY: str = "primary key cannot be a foreign key"
 FOREIGN_KEY_SETTINGS_INVALID: str = "foreign key mismatch or invalid settings"

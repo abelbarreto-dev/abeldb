@@ -3,8 +3,11 @@ from functools import wraps
 from re import compile
 from typing import Any, Callable
 
+from pydantic import BaseModel
+
 from src.exceptions import AbelDBException
 from src.utils.constants import (
+    COLUMN_NOT_MATCH,
     FOREIGN_KEY_SETTINGS_INVALID,
     INVALID_TYPE,
     PRIMARY_FOREIGN_KEY,
@@ -14,6 +17,11 @@ from src.utils.constants import (
 )
 from src.utils.status_enum import StatusEnum
 from src.utils.types_enum import TypesEnum
+
+
+class DataCheck(BaseModel):
+    name: str
+    value: Any
 
 
 def validator_column_params_decorator(function: Callable) -> Callable:
@@ -276,7 +284,29 @@ def validator_column_decorator(function: Callable) -> Callable:
         return "success"
 
     @wraps(function)
-    def decorator(value: Any, column: dict[str, Any]) -> Callable:
+    def decorator(column: dict[str, Any], value: dict | BaseModel) -> Callable:
+        new_value = value if value is dict else value.model_dump() if value is BaseModel else None
+
+        if not new_value:
+            raise AbelDBException(
+                INVALID_TYPE,
+                code=StatusEnum.BAD_REQUEST,
+                info=["value type", "invalid", "must be base model or dict"],
+            )
+
+        new_value = DataCheck.model_validate(new_value)
+
+        if new_value.name != column["name"]:
+            raise AbelDBException(
+                COLUMN_NOT_MATCH,
+                code=StatusEnum.BAD_REQUEST,
+                info=[
+                    "not match",
+                    f"value column='{value.name}'",
+                    f"column name='{column['name']}'",
+                ],
+            )
+
         if not column["params"]["type_name"]:
             raise AbelDBException(
                 TYPE_NAME_NOT_FOUND,
@@ -307,7 +337,7 @@ def validator_column_decorator(function: Callable) -> Callable:
                 info=["field type", "invalid", column["params"]["type_name"].value],
             )
 
-        result_validator = validator(value, **column["params"])
+        result_validator = validator(new_value.value, column["params"])
 
         if result_validator != "success":
             raise AbelDBException(
@@ -316,6 +346,6 @@ def validator_column_decorator(function: Callable) -> Callable:
                 info=["column", "validation invalid"],
             )
 
-        return function(value, **column)
+        return function(column, new_value.value)
 
     return decorator
