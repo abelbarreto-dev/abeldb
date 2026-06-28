@@ -30,13 +30,13 @@ class ColumnParams(BaseModel):
 class Column(BaseModel):
     name: str
     params: ColumnParams
-    document: list[Document]
+    documents: list[Document]
 
 
 class Table(BaseModel):
-    id: str = uuid4()
+    id: str = str(uuid4())
     name: str
-    database_id: str
+    database: str
     table_body: list[Column]
 
 
@@ -52,7 +52,7 @@ class Document(BaseModel):
 
 @validator_column_params_decorator
 def validate_column_params(column: Column) -> dict:
-    return column.model_dump()
+    return column
 
 
 @validator_column_decorator

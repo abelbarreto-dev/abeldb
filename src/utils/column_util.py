@@ -73,7 +73,7 @@ def validator_column_params_decorator(function: Callable) -> Callable:
                 ],
             )
 
-        return function(**column)
+        return function(column)
 
     return decorator
 

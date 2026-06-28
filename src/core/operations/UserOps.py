@@ -100,7 +100,7 @@ class UserOps:
                 DATABASE_USER_NOT_FOUND, code=StatusEnum.NOT_FOUND, info=["database", "not found"]
             )
 
-        found_user = [user for user in data if user.id == user_id]
+        found_user = [user for user in data if user["id"] == user_id]
 
         if not found_user:
             raise AbelDBException(
@@ -109,7 +109,7 @@ class UserOps:
                 info=["database", "user", "not found"],
             )
 
-        db_user: UserCreate = found_user[0]
+        db_user: UserCreate = UserCreate(**found_user[0])
 
         return f"{db_user.username}-{db_user.host}-{db_user.port}-"
 
@@ -176,6 +176,7 @@ class UserOps:
                     info=["database", "fatal error", "not found", "connection"],
                 )
 
+            print("database connected")
             return Connection(Database.model_validate(found_db))
         else:
             raise AbelDBException(
@@ -204,8 +205,7 @@ class UserOps:
             db_user = found_user[0]
 
             database = Database(
-                userId=db_user["id"],
-                database=user.database,
+                userId=db_user["id"], database=user.database, table_files=[], relations=[]
             )
 
             path = getenv(RESTRICT_DB_PATH) or "restrict_db_path"

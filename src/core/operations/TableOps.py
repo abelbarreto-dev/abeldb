@@ -8,7 +8,8 @@ from typing import Self
 from src.core.model.Connection import Connection
 from src.core.model.Relation import Relation, RelationType
 from src.core.model.Table import Column, Table, validate_column_params
-from src.core.operations import UserOps
+from src.core.model.TableFile import TableFile
+from src.core.operations.UserOps import UserOps
 from src.exceptions.AbelDBException import AbelDBException
 from src.utils.constants import (
     COLUMN_ALREADY_EXISTS,
@@ -44,7 +45,7 @@ class TableOps:
         present.
         """
         print("creating table")
-        table_exists = sum((1 for pfl in self._db_.db.table_files if pfl.name == table.name)) == 0
+        table_exists = sum((1 for pfl in self._db_.db.table_files if pfl.name == table.name)) == 1
 
         table.name = table.name.lower()
 
@@ -63,9 +64,9 @@ class TableOps:
             )
 
         for column in table.table_body:
-            validate_column_params(**column.model_dump())
+            validate_column_params(column.model_dump())
 
-        pk_count = sum((1 for row in table.table_body if row.primary_key))
+        pk_count = sum((1 for row in table.table_body if row.params.is_primary_key))
         if pk_count != 1:
             raise AbelDBException(
                 f"table must contains only one primary key -> {pk_count} found.",
@@ -78,7 +79,7 @@ class TableOps:
         )
 
         data_b = self._db_.db.model_copy()
-        data_b.table_files.append(**{"name": table.name, "file": table_file})
+        data_b.table_files.append(TableFile(name=table.name, file=table_file))
 
         db_prefix = await UserOps.find_db_prefix_by_user_id(user_id=data_b.userId)
         db_prefix += f"{data_b.database}.abel"
@@ -160,7 +161,7 @@ class TableOps:
             pickle_dump(table.model_dump(), writer)
         with open(file=database_file, mode="wb") as writer:
             pickle_dump(data_b.model_dump(), writer)
-        print("table created!")
+        print(f"table '{table.name}' created!")
 
     async def async_drop_table(self, table_name: str) -> None:
         """
@@ -186,7 +187,7 @@ class TableOps:
         db_prefix += f"{db.database}.abel"
 
         table_path = getenv(RESTRICT_TABLES_PATH) or "table_path"
-        table_path_file = f"{table_path}/{db_prefix}"
+        table_path_file = f"{table_path}{db_prefix}"
 
         if not isdir(table_path_file):
             raise AbelDBException(
@@ -229,16 +230,20 @@ class TableOps:
 
         db.relations = [rel for rel in update_relations]
 
-        db.table_files = [table for table in db.table_files if table != table_name]
+        table_file = [
+            file.file for file in db.table_files if file.name.lower() == table_name.lower()
+        ][0]
+
+        db.table_files = [table for table in db.table_files if table.name != table_name]
 
         with open(file=database_file, mode="wb") as writer:
             pickle_dump(db.model_dump(), writer)
 
-        table_path_file += f"/{table_name}"
+        table_path_file += f"/{table_file}"
 
         try:
             remove(table_path_file)
-            print("table dropped.")
+            print(f"table '{table_name}' dropped.")
         except OSError:
             raise AbelDBException(
                 TABLE_DROP_UNEXPECTED_ERROR,
@@ -409,5 +414,5 @@ class TableOps:
     async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(self) -> None:
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         self._db_ = None
