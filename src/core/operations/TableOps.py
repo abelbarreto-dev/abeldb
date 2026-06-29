@@ -1,3 +1,4 @@
+import shutil
 from genericpath import isdir, isfile
 from os import getenv, remove
 from pathlib import Path
@@ -19,6 +20,7 @@ from src.utils.constants import (
     DATABASE_NOT_FOUND,
     FOREIGN_KEY_ERROR,
     READER_MODE,
+    RELATION_DROP_ERROR,
     RELATION_TABLE_NOT_FOUND,
     RELATION_UNDEFINED,
     RESTRICT_DB_PATH,
@@ -101,6 +103,8 @@ class TableOps:
         if not isdir(table_path_file):
             folder = Path(table_path_file)
             folder.mkdir(parents=True, exist_ok=True)
+            doc_dir = Path(table_path_file, "documents")
+            doc_dir.mkdir(parents=True, exist_ok=True)
 
         table_path_file += f"/{table_file}"
 
@@ -132,8 +136,8 @@ class TableOps:
                 file = found[0]
                 data_b.relations.append(
                     Relation(
-                        table_one_id=table_file.lower(),
-                        table_two_id=file.file.lower(),
+                        table_one_id=table.name.lower(),
+                        table_two_id=file.name.lower(),
                         relation=relation_type,
                     )
                 )
@@ -220,8 +224,19 @@ class TableOps:
         update_relations = ()
 
         for rel in db.relations:
-            search = (rel.table_one_id, rel.table_two_id)
-            if table_name in search:
+            if table_name == rel.table_two_id:
+                raise AbelDBException(
+                    RELATION_DROP_ERROR,
+                    code=StatusEnum.UNAUTHORIZED,
+                    info=[
+                        "table relation",
+                        "breaks a drop",
+                        f"table {table_name} relacts to {rel.table_one_id}",
+                        f"relation type: {rel.relation.value}",
+                    ],
+                )
+
+            if table_name == rel.table_one_id:
                 with open(file=f"{table_path_file}/{rel.table_one_id}", mode=READER) as reader:
                     table: list = pickle_load(reader)
                 with open(file=f"{table_path_file}/{rel.table_one_id}", mode=WRITER) as writer:
@@ -249,10 +264,14 @@ class TableOps:
         with open(file=database_file, mode=WRITER) as writer:
             pickle_dump(db.model_dump(), writer)
 
+        table_docs = f"{table_path_file}/documents"
         table_path_file += f"/{table_file}"
 
         try:
             remove(table_path_file)
+            shutil.rmtree(table_docs, ignore_errors=True)
+            doc_dir = Path(table_docs)
+            doc_dir.mkdir(parents=True, exist_ok=True)
             print(f"table '{table_name}' dropped.")
         except OSError:
             raise AbelDBException(
