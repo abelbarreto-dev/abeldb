@@ -21,31 +21,22 @@ from src.utils.constants import (
     DATABASE_USER_ID_NOT_FOUND,
     DATABASE_USER_NOT_FOUND,
     FATAL_ERROR_DATABASE_NOT_FOUND,
+    READER_MODE,
     RESTRICT_DB_PATH,
     RESTRICT_FILE,
     SETTINGS_NOT_FOUND,
+    SPECIAL_WRITER,
+    WRITER_MODE,
 )
 from src.utils.status_enum import StatusEnum
 
 load_dotenv()
+READER: str = getenv(READER_MODE) or "reader_mode"
+WRITER: str = getenv(WRITER_MODE) or "writer_mode"
+SPECIAL_W: str = getenv(SPECIAL_WRITER) or "special_writer"
 
 
 class UserOps:
-    @classmethod
-    def __setup__(cls) -> bool:
-        file = getenv(RESTRICT_FILE) or "restrict_null"
-        print("setting database initial file")
-        try:
-            with open(file=file, mode="xb") as create:
-                create.write(b"")
-            print("file created")
-        except FileExistsError:
-            print("file already exists!")
-        except Exception as e:
-            print("unexpected error:", e)
-            return False
-        return True
-
     @classmethod
     async def user_create(cls, user: UserCreate) -> bool:
         cls.__setup__()
@@ -54,7 +45,7 @@ class UserOps:
         data: list = []
 
         if getsize(file_path_name) > 0:
-            with open(file=file_path_name, mode="rb") as file:
+            with open(file=file_path_name, mode=READER) as file:
                 raw = pickle_load(file)
                 data = raw if isinstance(raw, list) else [raw]
 
@@ -73,10 +64,10 @@ class UserOps:
 
         data.append(user.model_dump())
 
-        with open(file=file_path_name, mode="wb") as file:
+        with open(file=file_path_name, mode=WRITER) as file:
             pickle_dump(data, file)
 
-        with open(file=file_path_name, mode="rb") as file:
+        with open(file=file_path_name, mode=READER) as file:
             saved: list = pickle_load(file)
 
         try:
@@ -88,10 +79,25 @@ class UserOps:
             return False
 
     @classmethod
+    def __setup__(cls) -> bool:
+        file = getenv(RESTRICT_FILE) or "restrict_null"
+        print("setting database initial file")
+        try:
+            with open(file=file, mode=SPECIAL_W) as create:
+                create.write(b"")
+            print("file created")
+        except FileExistsError:
+            print("file already exists!")
+        except Exception as e:
+            print("unexpected error:", e)
+            return False
+        return True
+
+    @classmethod
     async def find_db_prefix_by_user_id(cls, user_id: str):
         file_path_name = getenv(RESTRICT_FILE) or "restrict_null"
 
-        with open(file=file_path_name, mode="rb") as file:
+        with open(file=file_path_name, mode=READER) as file:
             raw = pickle_load(file)
             data = raw if isinstance(raw, list) else [raw]
 
@@ -156,7 +162,7 @@ class UserOps:
                     info=["database", "not exists", file_name],
                 )
 
-            with open(file=file_db, mode="rb") as file:
+            with open(file=file_db, mode=READER) as file:
                 raw = pickle_load(file)
                 data = raw if isinstance(raw, list) else [raw]
 
@@ -232,7 +238,7 @@ class UserOps:
                     info=["database", "conflict", "already exists", file_name],
                 )
 
-            with open(file=file_db, mode="wb") as file:
+            with open(file=file_db, mode=WRITER) as file:
                 pickle_dump(database, file)
 
             print("database created")
@@ -242,6 +248,29 @@ class UserOps:
                 code=StatusEnum.UNAUTHORIZED,
                 info=["settings database", "not found", "unauthorized"],
             )
+
+    @classmethod
+    def __filter_db_user__(
+        cls, file_path_name: str, user: UserCreateDatabase | UserConnect | UserDropDatabase
+    ) -> list:
+        with open(file=file_path_name, mode=READER) as file:
+            raw = pickle_load(file)
+            data = raw if isinstance(raw, list) else [raw]
+
+        found_user = [
+            u
+            for u in data
+            if (u["username"], u["host"], u["port"]) == (user.username, user.host, user.port)
+        ]
+
+        if not found_user:
+            raise AbelDBException(
+                ABELDB_USER_NOT_FOUND,
+                code=StatusEnum.NOT_FOUND,
+                info=["databse", "user", "not found"],
+            )
+
+        return found_user
 
     @classmethod
     async def database_drop(cls, drop_user: UserDropDatabase) -> None:
@@ -280,29 +309,6 @@ class UserOps:
                 code=StatusEnum.INTERNAL_ERROR,
                 info=["drop database", "unexpect error"],
             )
-
-    @classmethod
-    def __filter_db_user__(
-        cls, file_path_name: str, user: UserCreateDatabase | UserConnect | UserDropDatabase
-    ) -> list:
-        with open(file=file_path_name, mode="rb") as file:
-            raw = pickle_load(file)
-            data = raw if isinstance(raw, list) else [raw]
-
-        found_user = [
-            u
-            for u in data
-            if (u["username"], u["host"], u["port"]) == (user.username, user.host, user.port)
-        ]
-
-        if not found_user:
-            raise AbelDBException(
-                ABELDB_USER_NOT_FOUND,
-                code=StatusEnum.NOT_FOUND,
-                info=["databse", "user", "not found"],
-            )
-
-        return found_user
 
     @classmethod
     def __db_name_formater__(cls, username: str, host: str, port: str, database: str) -> str:

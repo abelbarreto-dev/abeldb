@@ -5,14 +5,6 @@ from typing import Any
 from src.utils.types_enum import TypesEnum
 
 
-def get_column_type_value_str(value: Any) -> str:
-    type_name = str(type(value))
-    type_name = (
-        type_name.replace("<", "").replace(">", "").replace("class ", "").replace("'", "")
-    ).split(" ")[0]
-    return type_name
-
-
 def check_bool(value: Any, params: dict[str, Any]) -> str:
     if value is None and not params["is_nullable"]:
         return "value cannot be null"
@@ -213,3 +205,11 @@ def check_tuple(value: Any, params: dict[str, Any]) -> str:
         return "value does not match type tuple"
 
     return "success"
+
+
+def get_column_type_value_str(value: Any) -> str:
+    type_name = str(type(value))
+    type_name = (
+        type_name.replace("<", "").replace(">", "").replace("class ", "").replace("'", "")
+    ).split(" ")[0]
+    return type_name

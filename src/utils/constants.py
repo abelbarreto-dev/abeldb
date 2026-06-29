@@ -1,6 +1,13 @@
+# envs
+
 RESTRICT_FILE: str = "RESTRICT_FILE"
 RESTRICT_TABLES_PATH: str = "RESTRICT_TABLES_PATH"
 RESTRICT_DB_PATH: str = "RESTRICT_DB_PATH"
+READER_MODE: str = "READER_MODE"
+WRITER_MODE: str = "WRITER_MODE"
+SPECIAL_WRITER: str = "SPECIAL_WRITER"
+
+# variables constants
 
 TABLE_COLUMNS_NOT_FOUND: str = "table must define at least one column"
 TABLE_ALREADY_EXISTS: str = "table already exists"

@@ -15,5 +15,10 @@ For Lint Format, run the following:
 ruff format .
 ```
 
+For order code in file, run the following:
+```commandline
+sdsort <your_file.py>
+```
+
 ---
 *That's All Folks!*

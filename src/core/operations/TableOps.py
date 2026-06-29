@@ -5,6 +5,8 @@ from pickle import dump as pickle_dump
 from pickle import load as pickle_load
 from typing import Self
 
+from dotenv import load_dotenv
+
 from src.core.model.Connection import Connection
 from src.core.model.Relation import Relation, RelationType
 from src.core.model.Table import Column, Table, validate_column_params
@@ -16,6 +18,7 @@ from src.utils.constants import (
     COLUMN_OVERRIDE_NOT_FOUND,
     DATABASE_NOT_FOUND,
     FOREIGN_KEY_ERROR,
+    READER_MODE,
     RELATION_TABLE_NOT_FOUND,
     RELATION_UNDEFINED,
     RESTRICT_DB_PATH,
@@ -27,8 +30,13 @@ from src.utils.constants import (
     TABLE_NOT_EXISTS,
     TABLE_NOT_FOUND,
     UNEXPECTED_ALTER_TABLE_ERROR,
+    WRITER_MODE,
 )
 from src.utils.status_enum import StatusEnum
+
+load_dotenv()
+READER: str = getenv(READER_MODE) or "reader_mode"
+WRITER: str = getenv(WRITER_MODE) or "writer_mode"
 
 
 class TableOps:
@@ -159,9 +167,9 @@ class TableOps:
                 info=["dtatabase problem", "not found file", self._db_.db.database],
             )
 
-        with open(file=table_path_file, mode="wb") as writer:
+        with open(file=table_path_file, mode=WRITER) as writer:
             pickle_dump(table, writer)
-        with open(file=database_file, mode="wb") as writer:
+        with open(file=database_file, mode=WRITER) as writer:
             pickle_dump(data_b.model_dump(), writer)
         print(f"table '{table.name}' created!")
 
@@ -214,16 +222,16 @@ class TableOps:
         for rel in db.relations:
             search = (rel.table_one_id, rel.table_two_id)
             if table_name in search:
-                with open(file=f"{table_path_file}/{rel.table_one_id}", mode="rb") as reader:
+                with open(file=f"{table_path_file}/{rel.table_one_id}", mode=READER) as reader:
                     table: list = pickle_load(reader)
-                with open(file=f"{table_path_file}/{rel.table_one_id}", mode="wb") as writer:
+                with open(file=f"{table_path_file}/{rel.table_one_id}", mode=WRITER) as writer:
                     table.table_body = [
                         column for column in table.table_body if not column.params.is_foreign_key
                     ]
                     pickle_dump(table, writer)
-                with open(file=f"{table_path_file}/{rel.table_two_id}", mode="rb") as reader:
+                with open(file=f"{table_path_file}/{rel.table_two_id}", mode=READER) as reader:
                     table: list = pickle_load(reader)
-                with open(file=f"{table_path_file}/{rel.table_two_id}", mode="rb") as writer:
+                with open(file=f"{table_path_file}/{rel.table_two_id}", mode=WRITER) as writer:
                     table.table_body = [
                         column for column in table.table_body if not column.params.is_foreign_key
                     ]
@@ -238,7 +246,7 @@ class TableOps:
 
         db.table_files = [table for table in db.table_files if table.name != table_name]
 
-        with open(file=database_file, mode="wb") as writer:
+        with open(file=database_file, mode=WRITER) as writer:
             pickle_dump(db.model_dump(), writer)
 
         table_path_file += f"/{table_file}"
@@ -308,7 +316,7 @@ class TableOps:
 
         table_path_file += f"/{table_file}"
 
-        with open(file=table_path_file, mode="rb") as reader:
+        with open(file=table_path_file, mode=READER) as reader:
             tables = pickle_load(reader)
             target_table = tables
 
@@ -348,7 +356,7 @@ class TableOps:
             target_table.table_body = column_list
 
         try:
-            with open(file=table_path_file, mode="wb") as writer:
+            with open(file=table_path_file, mode=WRITER) as writer:
                 pickle_dump(target_table, writer)
             print(f"table edited -> drop={is_drop} -> override={is_override}")
         except OSError:
@@ -411,7 +419,7 @@ class TableOps:
                 info=["table not found", table_name, db.database],
             )
 
-        with open(file=f"{table_path_file}/{original}", mode="rb") as reader:
+        with open(file=f"{table_path_file}/{original}", mode=READER) as reader:
             tables = pickle_load(reader)
             target_table = tables
 
@@ -424,7 +432,7 @@ class TableOps:
 
         target_table.name = new_table_name
 
-        with open(file=f"{table_path_file}/{renamed}", mode="wb") as writer:
+        with open(file=f"{table_path_file}/{renamed}", mode=WRITER) as writer:
             pickle_dump(target_table, writer)
 
         remove(f"{table_path_file}/{original}")
@@ -443,10 +451,13 @@ class TableOps:
                 info=["database not found", db.database],
             )
 
-        with open(file=database_file, mode="wb") as writer:
+        with open(file=database_file, mode=WRITER) as writer:
             pickle_dump(db.model_dump(), writer)
 
         print(f"table '{table_name}' renamed to {new_table_name}!")
+
+    def __db_table_formater__(self, db_id: str, database: str, table: str) -> str:
+        return f"{db_id}-{database}-table-{table}.abel"
 
     async def async_find_table(self, table_name: str) -> Table:
         """
@@ -476,7 +487,7 @@ class TableOps:
         table_path = getenv(RESTRICT_TABLES_PATH) or "table_path"
         table_path_file = f"{table_path}{db_prefix}"
 
-        with open(file=f"{table_path_file}/{file}", mode="rb") as reader:
+        with open(file=f"{table_path_file}/{file}", mode=READER) as reader:
             tables = pickle_load(reader)
             target_table = tables
 
@@ -489,9 +500,6 @@ class TableOps:
 
         print("table found!")
         return target_table
-
-    def __db_table_formater__(self, db_id: str, database: str, table: str) -> str:
-        return f"{db_id}-{database}-table-{table}.abel"
 
     async def __aenter__(self) -> Self:
         return self
