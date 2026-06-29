@@ -161,8 +161,26 @@ class TableOps:
                 raise AbelDBException(
                     FOREIGN_KEY_ERROR,
                     code=StatusEnum.FORBIDDEN,
-                    info=["column", "foreign key", "table name referenced"],
+                    info=[
+                        "column",
+                        "foreign key",
+                        "table name referenced",
+                        "at least one foreign key",
+                    ],
                 )
+        else:
+            for column in table.table_body:
+                params = column.params
+                if (
+                    params.is_foreign_key
+                    or params.fK_foreign_table_name
+                    or params.fk_foreign_column_name
+                ):
+                    raise AbelDBException(
+                        FOREIGN_KEY_ERROR,
+                        code=StatusEnum.FORBIDDEN,
+                        info=["databse", "table relation not found", "foreign key found"],
+                    )
 
         if not isfile(database_file):
             raise AbelDBException(

@@ -21,7 +21,6 @@ class ColumnParams(BaseModel):
     is_foreign_key: bool = False
     fK_foreign_table_name: str | None = None
     fk_foreign_column_name: str | None = None
-    fk_foreign_column_value: str | int | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

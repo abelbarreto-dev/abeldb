@@ -55,7 +55,6 @@ def validator_column(function: Callable) -> Callable:
             column["params"]["is_foreign_key"]
             and not column["params"]["fK_foreign_table_name"]
             and not column["params"]["fk_foreign_column_name"]
-            and not column["params"]["fk_foreign_column_value"]
         ):
             raise AbelDBException(
                 FOREIGN_KEY_SETTINGS_INVALID,
