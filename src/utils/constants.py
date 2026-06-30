@@ -9,6 +9,8 @@ SPECIAL_WRITER: str = "SPECIAL_WRITER"
 
 # variables constants
 
+LOAD_TABLE_NAME_ERROR: str = "fail to found the table in database"
+
 TABLE_COLUMNS_NOT_FOUND: str = "table must define at least one column"
 TABLE_ALREADY_EXISTS: str = "table already exists"
 RELATION_DROP_ERROR: str = "table has a relations that breaks a drop"
