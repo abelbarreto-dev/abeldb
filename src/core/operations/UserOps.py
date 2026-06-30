@@ -62,7 +62,7 @@ class UserOps:
                 info=["database", "port", "host"],
             )
 
-        data.append(user.model_dump())
+        data.append(user)
 
         with open(file=file_path_name, mode=WRITER) as file:
             pickle_dump(data, file)
