@@ -9,7 +9,7 @@ from typing import Self
 from dotenv import load_dotenv
 
 from src.core.model.Connection import Connection
-from src.core.model.Relation import Relation, RelationType
+from src.core.model.Relation import Relation
 from src.core.model.Table import Column, Table, validate_column_params
 from src.core.model.TableFile import TableFile
 from src.core.operations.UserOps import UserOps
@@ -18,11 +18,9 @@ from src.utils.constants import (
     COLUMN_ALREADY_EXISTS,
     COLUMN_OVERRIDE_NOT_FOUND,
     DATABASE_NOT_FOUND,
-    FOREIGN_KEY_ERROR,
     READER_MODE,
     RELATION_DROP_ERROR,
     RELATION_TABLE_NOT_FOUND,
-    RELATION_UNDEFINED,
     RESTRICT_DB_PATH,
     RESTRICT_TABLES_PATH,
     TABLE_ALREADY_EXISTS,
@@ -45,9 +43,7 @@ class TableOps:
     def __init__(self, db: Connection) -> None:
         self._db_ = db
 
-    async def async_create_table(
-        self, table: Table, relact_table_name: str = None, relation_type: RelationType = None
-    ) -> None:
+    async def async_create_table(self, table: Table) -> None:
         """
         Async function to create a new table of documents. You must send an object of Table, the
         table relacted to this table if possible, then you must send the relation type.
@@ -98,7 +94,7 @@ class TableOps:
 
         table_path = getenv(RESTRICT_TABLES_PATH) or "table_path"
 
-        table_path_file = f"{table_path}/{db_prefix}"
+        table_path_file = f"{table_path}/{db_prefix}/{table_file}"
 
         if not isdir(table_path_file):
             folder = Path(table_path_file)
@@ -118,69 +114,46 @@ class TableOps:
         database_file = getenv(RESTRICT_DB_PATH) or "database_path/"
         database_file += db_prefix
 
-        if relact_table_name is not None:
-            if relation_type is None:
-                raise AbelDBException(
-                    RELATION_UNDEFINED,
-                    code=StatusEnum.BAD_REQUEST,
-                    info=["relation between tables", "relation type undefined"],
+        for column in table.table_body:
+            params = column.params
+
+            if (
+                params.is_foreign_key
+                and params.fK_foreign_table_name
+                and params.fk_foreign_column_name
+                and params.fk_relation_type
+            ):
+                found = tuple(
+                    table_db
+                    for table_db in data_b.table_files
+                    if params.fK_foreign_table_name.lower() == table_db.name.lower()
                 )
 
-            found = tuple(
-                table_db
-                for table_db in data_b.table_files
-                if relact_table_name.lower() == table_db.name.lower()
-            )
+                if len(found) == 0:
+                    raise AbelDBException(
+                        RELATION_TABLE_NOT_FOUND,
+                        code=StatusEnum.NOT_FOUND,
+                        info=[
+                            "table relation",
+                            f"related table '{params.fK_foreign_table_name}'",
+                            "not found",
+                        ],
+                    )
 
-            if found:
-                file = found[0]
+                found_table = found[0]
+
                 data_b.relations.append(
                     Relation(
                         table_one_id=table.name.lower(),
-                        table_two_id=file.name.lower(),
-                        relation=relation_type,
+                        table_two_id=found_table.name.lower(),
+                        relation=params.fk_relation_type,
                     )
                 )
             else:
-                raise AbelDBException(
-                    RELATION_TABLE_NOT_FOUND,
-                    code=StatusEnum.BAD_REQUEST,
-                    info=["foreign key", "table reference", "not found"],
-                )
-
-            found = sum(
-                (
-                    1
-                    for column in table.table_body
-                    if column.params.is_foreign_key
-                    and column.params.fK_foreign_table_name == relact_table_name
-                )
-            )
-
-            if found == 0:
-                raise AbelDBException(
-                    FOREIGN_KEY_ERROR,
-                    code=StatusEnum.FORBIDDEN,
-                    info=[
-                        "column",
-                        "foreign key",
-                        "table name referenced",
-                        "at least one foreign key",
-                    ],
-                )
-        else:
-            for column in table.table_body:
-                params = column.params
-                if (
-                    params.is_foreign_key
-                    or params.fK_foreign_table_name
-                    or params.fk_foreign_column_name
-                ):
-                    raise AbelDBException(
-                        FOREIGN_KEY_ERROR,
-                        code=StatusEnum.FORBIDDEN,
-                        info=["databse", "table relation not found", "foreign key found"],
-                    )
+                column.params.is_foreign_key = False
+                column.params.fK_foreign_table_name = None
+                column.params.fk_foreign_column_name = None
+                column.params.fk_relation_type = None
 
         if not isfile(database_file):
             raise AbelDBException(
@@ -192,7 +165,7 @@ class TableOps:
         with open(file=table_path_file, mode=WRITER) as writer:
             pickle_dump(table, writer)
         with open(file=database_file, mode=WRITER) as writer:
-            pickle_dump(data_b.model_dump(), writer)
+            pickle_dump(data_b, writer)
         print(f"table '{table.name}' created!")
 
     async def async_drop_table(self, table_name: str) -> None:
@@ -255,16 +228,23 @@ class TableOps:
                 )
 
             if table_name == rel.table_one_id:
-                with open(file=f"{table_path_file}/{rel.table_one_id}", mode=READER) as reader:
+                tb_one_file = [
+                    file.file for file in db.table_files if file.name == rel.table_one_id
+                ][0]
+                tb_two_file = [
+                    file.file for file in db.table_files if file.name == rel.table_two_id
+                ][0]
+
+                with open(file=f"{table_path_file}/{tb_one_file}", mode=READER) as reader:
                     table: list = pickle_load(reader)
-                with open(file=f"{table_path_file}/{rel.table_one_id}", mode=WRITER) as writer:
+                with open(file=f"{table_path_file}/{tb_one_file}", mode=WRITER) as writer:
                     table.table_body = [
                         column for column in table.table_body if not column.params.is_foreign_key
                     ]
                     pickle_dump(table, writer)
-                with open(file=f"{table_path_file}/{rel.table_two_id}", mode=READER) as reader:
+                with open(file=f"{table_path_file}/{tb_two_file}", mode=READER) as reader:
                     table: list = pickle_load(reader)
-                with open(file=f"{table_path_file}/{rel.table_two_id}", mode=WRITER) as writer:
+                with open(file=f"{table_path_file}/{tb_two_file}", mode=WRITER) as writer:
                     table.table_body = [
                         column for column in table.table_body if not column.params.is_foreign_key
                     ]
@@ -278,18 +258,19 @@ class TableOps:
         ][0]
 
         db.table_files = [table for table in db.table_files if table.name != table_name]
+        db.relations = [
+            rel for rel in db.relations if table_name not in (rel.table_one_id, rel.table_two_id)
+        ]
 
         with open(file=database_file, mode=WRITER) as writer:
-            pickle_dump(db.model_dump(), writer)
+            pickle_dump(db, writer)
 
-        table_docs = f"{table_path_file}/documents"
-        table_path_file += f"/{table_file}"
+        table_docs = f"{table_path_file}/{table_file}/documents"
+        table_path_file += f"/{table_file}/{table_file}"
 
         try:
             remove(table_path_file)
             shutil.rmtree(table_docs, ignore_errors=True)
-            doc_dir = Path(table_docs)
-            doc_dir.mkdir(parents=True, exist_ok=True)
             print(f"table '{table_name}' dropped.")
         except OSError:
             raise AbelDBException(
@@ -489,7 +470,7 @@ class TableOps:
             )
 
         with open(file=database_file, mode=WRITER) as writer:
-            pickle_dump(db.model_dump(), writer)
+            pickle_dump(db, writer)
 
         print(f"table '{table_name}' renamed to {new_table_name}!")
 

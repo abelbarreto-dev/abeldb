@@ -3,6 +3,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict
 
+from src.core.model.Relation import RelationType
 from src.core.wrappers.validate_column import validator_column
 from src.utils.types_enum import TypesEnum
 
@@ -21,6 +22,7 @@ class ColumnParams(BaseModel):
     is_foreign_key: bool = False
     fK_foreign_table_name: str | None = None
     fk_foreign_column_name: str | None = None
+    fk_relation_type: RelationType | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
